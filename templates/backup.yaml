@@ -1,0 +1,30 @@
+{{- if (.Values.backup).enabled }}
+{{- $backup := .Values.backup }}
+---
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (printf "%s-backup" (include "application.name" .) | trunc 63 | trimSuffix "-") "namespace" $backup.namespace "labels" $backup.additionalLabels "annotations" $backup.annotations) | nindent 2 }}
+spec:
+  labelSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: {{ default (include "application.name" .) .Values.partOfOverride }}
+  {{- if not (kindIs "invalid" $backup.includedNamespaces) }}
+  includedNamespaces:
+    {{- range $namespace := $backup.includedNamespaces }}
+    - {{ include "application.tplvalues.render" (dict "value" $namespace "context" $) }}
+    {{- end }}
+  {{- end }}
+  defaultVolumesToRestic: {{ $backup.defaultVolumesToRestic }}
+  snapshotVolumes: {{ $backup.snapshotVolumes }}
+  storageLocation: {{ $backup.storageLocation | quote }}
+  ttl: {{ $backup.ttl }}
+  {{- with $backup.includedResources }}
+  includedResources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $backup.excludedResources }}
+  excludedResources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

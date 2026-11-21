@@ -1,0 +1,11 @@
+{{- if (.Values.configMap).enabled }}
+{{- range $nameSuffix, $data := .Values.configMap.files }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (printf "%s-%s" (include "application.name" $) $nameSuffix) "labels" $.Values.configMap.additionalLabels "annotations" $.Values.configMap.annotations) | nindent 2 }}
+data:
+  {{- include "application.tplvalues.render" (dict "value" $data "context" $) | nindent 2 }}
+{{- end }}
+{{- end }}

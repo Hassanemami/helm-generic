@@ -1,0 +1,231 @@
+{{- if .Values.deployment.enabled }}
+{{- $name := include "application.name" . }}
+{{- $dep := .Values.deployment }}
+{{- $mountPVC := and (.Values.persistence).enabled (.Values.persistence).mountPVC }}
+{{- $annotations := merge (dict) ($dep.annotations | default dict) (ternary (dict "reloader.stakater.com/auto" "true") (dict) (not (not $dep.reloadOnChange))) }}
+{{- $podAnnotations := merge (dict) ($dep.additionalPodAnnotations | default dict) }}
+{{- with $dep.fluentdConfigAnnotations }}
+  {{- $container := dict "containerName" $name "expression" (default "" .regex) "expressionFirstLine" (default "" .regexFirstLine) "timeFormat" (default "" .timeFormat) }}
+  {{- $fluentd := dict "containers" (list $container) }}
+  {{- with .notifications }}
+    {{- $notifications := dict "key" (default "" .key) "pattern" (default "" .pattern) }}
+    {{- with .slack }}
+      {{- $_ := set $notifications "slack" (dict "webhookURL" (default "" .webhookURL) "channelName" (default "" .channelName)) }}
+    {{- end }}
+    {{- $_ := set $fluentd "notifications" $notifications }}
+  {{- end }}
+  {{- $_ := set $podAnnotations "fluentdConfiguration" (list $fluentd | toPrettyJson) }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" $name "labels" $dep.additionalLabels "annotations" $annotations) | nindent 2 }}
+spec:
+  {{- if not (kindIs "invalid" $dep.replicas) }}
+  replicas: {{ $dep.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "application.selectorLabels" . | nindent 6 }}
+  {{- with $dep.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if not (kindIs "invalid" $dep.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ $dep.revisionHistoryLimit }}
+  {{- end }}
+  {{- if not (kindIs "invalid" $dep.minReadySeconds) }}
+  minReadySeconds: {{ $dep.minReadySeconds }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "application.podLabels" (dict "context" $ "class" "serving" "labels" $dep.podLabels) | nindent 8 }}
+      {{- with $podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if not (kindIs "invalid" $dep.enableServiceLinks) }}
+      enableServiceLinks: {{ $dep.enableServiceLinks }}
+      {{- end }}
+      {{- with $dep.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dep.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.rbac.serviceAccount.enabled }}
+      serviceAccountName: {{ include "application.serviceAccountName" . }}
+      {{- end }}
+      automountServiceAccountToken: {{ $dep.automountServiceAccountToken }}
+      {{- with $dep.hostNetwork }}
+      hostNetwork: {{ . }}
+      {{- end }}
+      {{- with $dep.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with $dep.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with $dep.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dep.dnsPolicy }}
+      dnsPolicy: {{ . }}
+      {{- end }}
+      {{- with $dep.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dep.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dep.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dep.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dep.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if not (kindIs "invalid" $dep.terminationGracePeriodSeconds) }}
+      terminationGracePeriodSeconds: {{ $dep.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- if $dep.initContainers }}
+      initContainers:
+        {{- range $key, $value := $dep.initContainers }}
+        - name: {{ $key }}
+          {{- include "application.tplvalues.render" (dict "value" (omit $value "name") "context" $) | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      containers:
+        {{- if $dep.openshiftOAuthProxy.enabled }}
+        {{- $tlsDisabled := $dep.openshiftOAuthProxy.disableTLSArg }}
+        - name: oauth-proxy
+          image: {{ $dep.openshiftOAuthProxy.image | default "openshift/oauth-proxy:latest" }}
+          imagePullPolicy: IfNotPresent
+          args:
+            {{- if $tlsDisabled }}
+            - --http-address=:8081
+            {{- else }}
+            - --https-address=:8443
+            {{- end }}
+            - --provider=openshift
+            - --upstream=http://localhost:{{ $dep.openshiftOAuthProxy.port }}
+            - --openshift-service-account={{ $name }}
+            - --tls-cert=/etc/tls/private/tls.crt
+            - --tls-key=/etc/tls/private/tls.key
+            - --cookie-secret=SECRET
+          ports:
+            - name: proxy
+              containerPort: {{ ternary 8081 8443 (default false $tlsDisabled) }}
+          volumeMounts:
+            - name: proxy-tls
+              mountPath: /etc/tls/private
+        {{- end }}
+        - name: {{ $name }}
+          image: {{ include "application.image" (dict "image" $dep.image "context" $ "name" $name "error" "Undefined image for application container") | quote }}
+          imagePullPolicy: {{ $dep.image.pullPolicy }}
+          {{- with $dep.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $dep.command }}
+          command:
+            {{- include "application.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
+          {{- end }}
+          {{- with $dep.args }}
+          args:
+            {{- include "application.tplvalues.render" (dict "value" . "context" $) | nindent 12 }}
+          {{- end }}
+          {{- with $dep.ports }}
+          ports:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $dep.envFrom }}
+          envFrom:
+            {{- range . }}
+            {{- $ref := dict }}
+            {{- if .name }}
+              {{- $_ := set $ref "name" (include "application.tplvalues.render" (dict "value" .name "context" $)) }}
+            {{- else if .nameSuffix }}
+              {{- $_ := set $ref "name" (printf "%s-%s" $name (include "application.tplvalues.render" (dict "value" .nameSuffix "context" $))) }}
+            {{- else }}
+              {{- $_ := set $ref "name" $name }}
+            {{- end }}
+            {{- $_ := set $ref "optional" (default false .optional) }}
+            {{- if eq (default "" .type) "configmap" }}
+            - configMapRef:
+                {{- toYaml $ref | nindent 16 }}
+            {{- else if eq (default "" .type) "secret" }}
+            - secretRef:
+                {{- toYaml $ref | nindent 16 }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- with $dep.env }}
+          env:
+            {{- include "application.env" (dict "env" . "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if $dep.startupProbe.enabled }}
+          startupProbe:
+            {{- include "application.probe" $dep.startupProbe | nindent 12 }}
+          {{- end }}
+          {{- if $dep.livenessProbe.enabled }}
+          livenessProbe:
+            {{- include "application.probe" $dep.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if $dep.readinessProbe.enabled }}
+          readinessProbe:
+            {{- include "application.probe" $dep.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if or $mountPVC $dep.volumeMounts }}
+          volumeMounts:
+            {{- if $mountPVC }}
+            - name: {{ $name }}-data
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+            {{- range $key, $value := $dep.volumeMounts }}
+            - name: {{ $key }}
+              {{- include "application.tplvalues.render" (dict "value" $value "context" $) | nindent 14 }}
+            {{- end }}
+          {{- end }}
+          {{- with $dep.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $dep.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with $dep.additionalContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if or $dep.openshiftOAuthProxy.enabled $mountPVC $dep.volumes }}
+      volumes:
+        {{- if $dep.openshiftOAuthProxy.enabled }}
+        - name: proxy-tls
+          secret:
+            secretName: {{ $dep.openshiftOAuthProxy.secretName }}
+        {{- end }}
+        {{- if $mountPVC }}
+        - name: {{ $name }}-data
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-data" $name) .Values.persistence.name }}
+        {{- end }}
+        {{- range $key, $value := $dep.volumes }}
+        - name: {{ $key }}
+          {{- include "application.tplvalues.render" (dict "value" $value "context" $) | nindent 10 }}
+        {{- end }}
+      {{- end }}
+{{- end }}

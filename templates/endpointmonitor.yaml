@@ -1,0 +1,23 @@
+{{- $routeEnabled := (.Values.route).enabled }}
+{{- $ingressEnabled := (.Values.ingress).enabled }}
+{{- if and (.Values.endpointMonitor).enabled (.Capabilities.APIVersions.Has "endpointmonitor.stakater.com/v1alpha1") (or $routeEnabled $ingressEnabled) }}
+---
+apiVersion: endpointmonitor.stakater.com/v1alpha1
+kind: EndpointMonitor
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (include "application.name" .) "labels" .Values.endpointMonitor.additionalLabels "annotations" .Values.endpointMonitor.annotations) | nindent 2 }}
+spec:
+  forceHttps: true
+  urlFrom:
+    {{- if $routeEnabled }}
+    routeRef:
+      name: {{ include "application.name" . }}
+    {{- end }}
+    {{- if $ingressEnabled }}
+    ingressRef:
+      name: {{ include "application.name" . }}
+    {{- end }}
+  {{- with .Values.endpointMonitor.additionalConfig }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

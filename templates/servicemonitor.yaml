@@ -1,0 +1,17 @@
+{{- if and (.Values.serviceMonitor).enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (printf "%s-svc-monitor" (include "application.name" .)) "labels" .Values.serviceMonitor.additionalLabels "annotations" .Values.serviceMonitor.annotations) | nindent 2 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "application.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  namespaceSelector:
+    matchNames:
+      - {{ include "application.namespace" . }}
+  endpoints:
+    {{- toYaml .Values.serviceMonitor.endpoints | nindent 4 }}
+{{- end }}

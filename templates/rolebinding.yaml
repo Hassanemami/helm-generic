@@ -1,0 +1,18 @@
+{{- if and (.Values.rbac).enabled .Values.rbac.roles }}
+{{- range .Values.rbac.roles }}
+{{- $roleName := printf "%s-role-%s" (include "application.name" $) .name }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (printf "%s-rolebinding-%s" (include "application.name" $) .name) "labels" $.Values.rbac.additionalLabels "annotations" $.Values.rbac.annotations) | nindent 2 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $roleName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "application.serviceAccountName" $ }}
+    namespace: {{ include "application.namespace" $ }}
+{{- end }}
+{{- end }}

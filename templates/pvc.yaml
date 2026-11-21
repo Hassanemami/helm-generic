@@ -1,0 +1,23 @@
+{{- if and (.Values.persistence).enabled (not .Values.persistence.existingClaim) }}
+{{- $pvc := .Values.persistence }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (default (printf "%s-data" (include "application.name" .)) $pvc.name) "labels" $pvc.additionalLabels "annotations" $pvc.annotations) | nindent 2 }}
+spec:
+  accessModes:
+    - {{ $pvc.accessMode | quote }}
+  resources:
+    requests:
+      storage: {{ $pvc.storageSize | quote }}
+  {{- if $pvc.storageClass }}
+  storageClassName: {{ ternary "" $pvc.storageClass (eq "-" $pvc.storageClass) | quote }}
+  {{- end }}
+  {{- with $pvc.volumeMode }}
+  volumeMode: {{ . | quote }}
+  {{- end }}
+  {{- with $pvc.volumeName }}
+  volumeName: {{ . | quote }}
+  {{- end }}
+{{- end }}

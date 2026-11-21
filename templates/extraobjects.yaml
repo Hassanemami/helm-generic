@@ -1,0 +1,24 @@
+{{- /*
+Extra manifests. Each entry (list item or map value) can be a string or an object, is rendered through
+tpl and may hold several YAML documents. Common labels are added to every object that has a `kind`.
+*/}}
+{{- $defaultExtraObject := dict "metadata" (dict "labels" (include "application.labels" . | fromYaml)) }}
+{{- $extraObjects := .Values.extraObjects | default (list) }}
+{{- if kindIs "map" $extraObjects }}
+  {{- $extraObjects = values $extraObjects }}
+{{- end }}
+{{- range $extraObjects }}
+  {{- $rendered := "" }}
+  {{- if kindIs "map" . }}
+    {{- $rendered = tpl (toYaml .) $ }}
+  {{- else if kindIs "string" . }}
+    {{- $rendered = tpl . $ }}
+  {{- end }}
+  {{- range regexSplit "(?m)^---[ \t]*\r?\n" $rendered -1 }}
+    {{- $parsedObject := fromYaml . }}
+    {{- if and $parsedObject (hasKey $parsedObject "kind") }}
+---
+{{ toYaml (merge $parsedObject $defaultExtraObject) }}
+    {{- end }}
+  {{- end }}
+{{- end }}

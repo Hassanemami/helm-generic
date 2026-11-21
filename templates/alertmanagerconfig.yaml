@@ -1,0 +1,21 @@
+{{- if and (.Values.alertmanagerConfig).enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1alpha1") }}
+{{- $amc := .Values.alertmanagerConfig }}
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (include "application.name" .) "labels" $amc.selectionLabels) | nindent 2 }}
+spec:
+  {{- with $amc.spec.route }}
+  route:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $amc.spec.receivers }}
+  receivers:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $amc.spec.inhibitRules }}
+  inhibitRules:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

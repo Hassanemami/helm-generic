@@ -1,0 +1,40 @@
+{{- if (.Values.service).enabled }}
+{{- $svc := .Values.service }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (include "application.name" .) "labels" $svc.additionalLabels "annotations" (include "application.tplvalues.render" (dict "value" $svc.annotations "context" $) | fromYaml)) | nindent 2 }}
+spec:
+  type: {{ $svc.type }}
+  {{- with $svc.clusterIP }}
+  clusterIP: {{ . }}
+  {{- end }}
+  {{- if eq $svc.type "LoadBalancer" }}
+  {{- with $svc.loadBalancerClass }}
+  loadBalancerClass: {{ . }}
+  {{- end }}
+  {{- with $svc.loadBalancerIP }}
+  loadBalancerIP: {{ . }}
+  {{- end }}
+  {{- with $svc.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  {{- with $svc.externalIPs }}
+  externalIPs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "application.selectorLabels" . | nindent 4 }}
+  ports:
+    {{- if .Values.deployment.openshiftOAuthProxy.enabled }}
+    - name: proxy
+      port: 443
+      protocol: TCP
+      targetPort: {{ ternary 8081 8443 (default false .Values.deployment.openshiftOAuthProxy.disableTLSArg) }}
+    {{- else }}
+    {{- toYaml $svc.ports | nindent 4 }}
+    {{- end }}
+{{- end }}

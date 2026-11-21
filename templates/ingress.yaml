@@ -1,0 +1,39 @@
+{{- if (.Values.ingress).enabled }}
+{{- $name := include "application.name" . }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" $name "labels" .Values.ingress.additionalLabels "annotations" .Values.ingress.annotations) | nindent 2 }}
+spec:
+  {{- with .Values.ingress.ingressClassName }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    {{- if not .paths }}
+      {{- fail "Specify paths for ingress host, check values.yaml" }}
+    {{- end }}
+    - host: {{ tpl .host $ | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ default "ImplementationSpecific" .pathType }}
+            backend:
+              service:
+                name: {{ default $name .serviceName }}
+                port:
+                  {{- $port := default "http" .servicePort }}
+                  {{- if kindIs "string" $port }}
+                  name: {{ $port }}
+                  {{- else }}
+                  number: {{ $port }}
+                  {{- end }}
+          {{- end }}
+    {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- include "application.tplvalues.render" (dict "value" . "context" $) | nindent 4 }}
+  {{- end }}
+{{- end }}

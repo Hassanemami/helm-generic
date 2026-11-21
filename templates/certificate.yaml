@@ -1,0 +1,75 @@
+{{- if and (.Values.certificate).enabled (.Capabilities.APIVersions.Has "cert-manager.io/v1") }}
+{{- $cert := .Values.certificate }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (printf "%s-certificate" (include "application.name" .)) "labels" $cert.additionalLabels "annotations" $cert.annotations) | nindent 2 }}
+spec:
+  secretName: {{ include "application.tplvalues.render" (dict "value" $cert.secretName "context" $) }}
+  duration: {{ $cert.duration }}
+  renewBefore: {{ $cert.renewBefore }}
+  {{- with include "application.tplvalues.render" (dict "value" $cert.subject "context" $) }}
+  subject:
+    {{- . | nindent 4 }}
+  {{- end }}
+  commonName: {{ include "application.tplvalues.render" (dict "value" $cert.commonName "context" $) }}
+  {{- if $cert.isCA }}
+  isCA: true
+  {{- end }}
+  {{- with $cert.usages }}
+  usages:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- /* At least one of dnsNames, uris or ipAddresses is required by cert-manager. */}}
+  {{- with include "application.tplvalues.render" (dict "value" $cert.dnsNames "context" $) }}
+  dnsNames:
+    {{- . | nindent 4 }}
+  {{- end }}
+  {{- with $cert.ipAddresses }}
+  ipAddresses:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $cert.uriSANs }}
+  uris:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $cert.emailSANs }}
+  emailAddresses:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $cert.privateKey.enabled }}
+  privateKey:
+    algorithm: {{ $cert.keyAlgorithm }}
+    encoding: {{ $cert.keyEncoding }}
+    size: {{ $cert.keySize }}
+    rotationPolicy: {{ $cert.privateKey.rotationPolicy }}
+  {{- end }}
+  issuerRef:
+    name: {{ $cert.issuerRef.name }}
+    kind: {{ $cert.issuerRef.kind }}
+    {{- with $cert.issuerRef.group }}
+    group: {{ . }}
+    {{- end }}
+  {{- if $cert.keystores.enabled }}
+  keystores:
+    {{- with $cert.keystores.jks }}
+    {{- if .create }}
+    jks:
+      create: true
+      passwordSecretRef:
+        name: {{ .name }}
+        key: {{ .key }}
+    {{- end }}
+    {{- end }}
+    {{- with $cert.keystores.pkcs12 }}
+    {{- if .create }}
+    pkcs12:
+      create: true
+      passwordSecretRef:
+        name: {{ include "application.tplvalues.render" (dict "value" .name "context" $) }}
+        key: {{ .key }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}

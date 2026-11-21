@@ -1,0 +1,25 @@
+{{- if (.Values.job).enabled }}
+{{- range $name, $job := .Values.job.jobs }}
+---
+{{- if $.Capabilities.APIVersions.Has "batch/v1/Job" }}
+apiVersion: batch/v1
+{{- else }}
+apiVersion: batch/v1beta1
+{{- end }}
+kind: Job
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" $name "labels" $job.additionalLabels "annotations" $job.annotations) | nindent 2 }}
+spec:
+  {{- if not (kindIs "invalid" $job.startingDeadlineSeconds) }}
+  startingDeadlineSeconds: {{ $job.startingDeadlineSeconds }}
+  {{- end }}
+  {{- if not (kindIs "invalid" $job.activeDeadlineSeconds) }}
+  activeDeadlineSeconds: {{ $job.activeDeadlineSeconds }}
+  {{- end }}
+  {{- if not (kindIs "invalid" $job.backoffLimit) }}
+  backoffLimit: {{ $job.backoffLimit }}
+  {{- end }}
+  template:
+    {{- include "application.jobPodTemplate" (dict "context" $ "name" $name "job" $job "class" "batch" "legacySecurityContext" "pod") | nindent 4 }}
+{{- end }}
+{{- end }}

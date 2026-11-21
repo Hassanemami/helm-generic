@@ -1,0 +1,36 @@
+{{- if and (.Values.grafanaDashboard).enabled (.Capabilities.APIVersions.Has "grafana.integreatly.org/v1beta1") }}
+{{- range $name, $content := .Values.grafanaDashboard.contents }}
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  {{- /* `grafanaDashboard` is the label used as dashboard selector by the grafana operator. */}}
+  {{- $labels := merge (dict) ($.Values.grafanaDashboard.additionalLabels | default dict) (dict "grafanaDashboard" "grafana-operator") }}
+  {{- include "application.metadata" (dict "context" $ "name" $name "labels" $labels "annotations" $.Values.grafanaDashboard.annotations) | nindent 2 }}
+spec:
+  {{- with $content.json }}
+  json: {{ toJson . }}
+  {{- end }}
+  {{- with $content.url }}
+  url: {{ . }}
+  {{- end }}
+  {{- with $content.allowCrossNamespaceImport }}
+  allowCrossNamespaceImport: {{ . }}
+  {{- end }}
+  {{- with $content.folder }}
+  folder: {{ . }}
+  {{- end }}
+  {{- with $content.instanceSelector }}
+  instanceSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $content.configMapRef }}
+  configMapRef:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $content.datasources }}
+  datasources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

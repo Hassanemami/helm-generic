@@ -1,0 +1,25 @@
+{{- if and (.Values.forecastle).enabled (.Capabilities.APIVersions.Has "forecastle.stakater.com/v1alpha1") (or (.Values.ingress).enabled (.Values.route).enabled) }}
+{{- $forecastle := .Values.forecastle }}
+---
+apiVersion: forecastle.stakater.com/v1alpha1
+kind: ForecastleApp
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (include "application.name" .) "labels" $forecastle.additionalLabels) | nindent 2 }}
+spec:
+  name: {{ $forecastle.displayName }}
+  group: {{ default .Release.Namespace $forecastle.group }}
+  icon: {{ $forecastle.icon }}
+  urlFrom:
+    {{- if (.Values.ingress).enabled }}
+    ingressRef:
+      name: {{ include "application.name" . }}
+    {{- else }}
+    routeRef:
+      name: {{ include "application.name" . }}
+    {{- end }}
+  networkRestricted: {{ $forecastle.networkRestricted }}
+  {{- with $forecastle.properties }}
+  properties:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

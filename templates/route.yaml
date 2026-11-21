@@ -1,0 +1,35 @@
+{{- if and (.Values.route).enabled (.Capabilities.APIVersions.Has "route.openshift.io/v1") }}
+{{- $route := .Values.route }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  {{- include "application.metadata" (dict "context" $ "name" (include "application.name" .) "labels" $route.additionalLabels "annotations" $route.annotations) | nindent 2 }}
+spec:
+  {{- with $route.host }}
+  host: {{ . }}
+  {{- end }}
+  {{- with $route.path }}
+  path: {{ . }}
+  {{- end }}
+  port:
+    {{- if .Values.deployment.openshiftOAuthProxy.enabled }}
+    targetPort: proxy
+    {{- else }}
+    {{- toYaml $route.port | nindent 4 }}
+    {{- end }}
+  to:
+    kind: Service
+    name: {{ include "application.name" . }}
+    weight: {{ default 100 ($route.to).weight }}
+  wildcardPolicy: {{ $route.wildcardPolicy }}
+  tls:
+    termination: {{ $route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ $route.tls.insecureEdgeTerminationPolicy }}
+  {{- with $route.alternateBackends }}
+  alternateBackends:
+    - kind: {{ .kind }}
+      name: {{ .name }}
+      weight: {{ .weight }}
+  {{- end }}
+{{- end }}
